@@ -22,7 +22,7 @@ get_hashmap()
         [ "${wallSource}" == "--skipstrays" ] && skipStrays=1 && continue
         [ "${wallSource}" == "--verbose" ] && verboseMap=1 && continue
 
-        hashMap=$(find "${wallSource}" -type f \( -iname "*.gif" -o -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" \) -exec "${hashMech}" {} + | sort -k2)
+        hashMap=$(find "${wallSource}" -type f \( -iname "*.mp4" -o -iname "*.gif" -o -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" \) -exec "${hashMech}" {} + | sort -k2)
         if [ -z "${hashMap}" ] ; then
             echo "WARNING: No image found in \"${wallSource}\""
             continue
@@ -89,7 +89,7 @@ get_themes()
 
 case "${enableWallDcol}" in
     0|1|2|3) ;;
-    *) enableWallDcol=0 ;;
+    *) enableWallDcol=1 ;;
 esac
 
 if [ -z "${hydeTheme}" ] || [ ! -d "${hydeConfDir}/themes/${hydeTheme}" ] ; then

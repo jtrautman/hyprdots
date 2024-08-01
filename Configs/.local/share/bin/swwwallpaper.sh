@@ -2,7 +2,6 @@
 
 
 #// lock instance
-
 lockFile="/tmp/hyde$(id -u)$(basename ${0}).lock"
 [ -e "${lockFile}" ] && echo "An instance of the script is already running..." && exit 1
 touch "${lockFile}"
@@ -10,13 +9,20 @@ trap 'rm -f ${lockFile}' EXIT
 
 
 #// define functions
-
 Wall_Cache()
 {
+    wallExt="${wallList[setIndex]##*.}"
+
     ln -fs "${wallList[setIndex]}" "${wallSet}"
     ln -fs "${wallList[setIndex]}" "${wallCur}"
-    "${scrDir}/swwwallcache.sh" -w "${wallList[setIndex]}" &> /dev/null
-    "${scrDir}/swwwallbash.sh" "${wallList[setIndex]}" &
+
+    Preprocess_MP4
+
+    "${scrDir}/swwwallcache.sh" -w "${wallJpg}" #&> /dev/null
+    "${scrDir}/swwwallbash.sh" "${wallJpg}" #&
+
+    Postprocess_MP4
+
     ln -fs "${thmbDir}/${wallHash[setIndex]}.sqre" "${wallSqr}"
     ln -fs "${thmbDir}/${wallHash[setIndex]}.thmb" "${wallTmb}"
     ln -fs "${thmbDir}/${wallHash[setIndex]}.blur" "${wallBlr}"
@@ -40,22 +46,89 @@ Wall_Change()
     Wall_Cache
 }
 
+Preprocess_MP4()
+{
+    wallJpg="${wallList[setIndex]}"
+
+    if [ "${wallExt}" == "mp4" ] ; then
+        [ -d "${cacheDir}/themes/${hydeTheme}" ] || mkdir -p "${cacheDir}/themes/${hydeTheme}"
+
+        mp4Sha=$(set_hash "${wallJpg}")
+        imageName=$(basename "${wallList[setIndex]}.jpg")
+        wallJpg="${cacheDir}/themes/${hydeTheme}/${imageName}"
+
+        [ -f "${wallJpg}" ] || ffmpeg -y -i "${wallList[setIndex]}" -ss 00:00:01.000 -vframes 1 "${wallJpg}"
+
+        jpgSha=$(set_hash "${wallJpg}")
+    fi
+}
+
+Postprocess_MP4()
+{
+    if [ "${wallExt}" == "mp4" ] ; then
+        cp -f "${thmbDir}/${jpgSha}.blur" "${thmbDir}/${mp4Sha}.blur"
+        cp -f "${thmbDir}/${jpgSha}.quad" "${thmbDir}/${mp4Sha}.quad"
+        cp -f "${thmbDir}/${jpgSha}.sqre" "${thmbDir}/${mp4Sha}.sqre"
+        cp -f "${thmbDir}/${jpgSha}.thmb" "${thmbDir}/${mp4Sha}.thmb"
+        cp -f "${dcolDir}/${jpgSha}.dcol" "${dcolDir}/${mp4Sha}.dcol"
+    fi
+}
+
+Wall_Set()
+{
+    Kill_Mpv
+
+    local x_wall=$(readlink -f "${wallSet}")
+    local wallExt="${x_wall##*.}"
+ 
+    echo ":: applying wall :: \"${x_wall}\""
+    if [ "${wallExt}" == "mp4" ] ; then
+        Mpv_Set
+    else
+        Swww_Set
+    fi
+}
+
+Swww_Set()
+{
+    swww img "$(readlink "${wallSet}")" \
+    --transition-bezier .43,1.19,1,.4 \
+    --transition-type "${xtrans}" \
+    --transition-duration "${wallTransDuration}" \
+    --transition-fps "${wallFramerate}" \
+    --invert-y \
+    --transition-pos "$(hyprctl cursorpos | grep -E '^[0-9]' || echo "0,0")" &
+}
+
+Kill_Mpv()
+{
+    if [ -e $mpvPid ] ; then
+        kill $(cat $mpvPid)
+	rm -f $mpvPid
+    fi
+}
+
+Mpv_Set()
+{
+    mpvpaper -o "no-audio --loop-file" "*" "$wallSet" &
+    echo "$!" > "$mpvPid"
+}
 
 #// set variables
-
 scrDir="$(dirname "$(realpath "$0")")"
 source "${scrDir}/globalcontrol.sh"
 wallSet="${hydeThemeDir}/wall.set"
 wallCur="${cacheDir}/wall.set"
 wallSqr="${cacheDir}/wall.sqre"
 wallTmb="${cacheDir}/wall.thmb"
+wallJpg="${cacheDir}/wall.jpg"
 wallBlr="${cacheDir}/wall.blur"
 wallQad="${cacheDir}/wall.quad"
 wallDcl="${cacheDir}/wall.dcol"
+mpvPid="${XDG_CONFIG_HOME:-$HOME/.config}/swww/mpv.pid"
 
 
 #// check wall
-
 setIndex=0
 [ ! -d "${hydeThemeDir}" ] && echo "ERROR: \"${hydeThemeDir}\" does not exist" && exit 0
 wallPathArray=("${hydeThemeDir}")
@@ -65,7 +138,6 @@ get_hashmap "${wallPathArray[@]}"
 
 
 #// evaluate options
-
 while getopts "nps:" option ; do
     case $option in
     n ) # set next wallpaper
@@ -94,7 +166,6 @@ done
 
 
 #// check swww daemon
-
 swww query &> /dev/null
 if [ $? -ne 0 ] ; then
     swww-daemon --format xrgb &
@@ -103,13 +174,12 @@ fi
 
 
 #// set defaults
-
 [ -z "${xtrans}" ] && xtrans="grow"
 [ -z "${wallFramerate}" ] && wallFramerate=60
 [ -z "${wallTransDuration}" ] && wallTransDuration=0.4
 
 
 #// apply wallpaper
+Wall_Set
 
-echo ":: applying wall :: \"$(readlink -f "${wallSet}")\""
-swww img "$(readlink "${wallSet}")" --transition-bezier .43,1.19,1,.4 --transition-type "${xtrans}" --transition-duration "${wallTransDuration}" --transition-fps "${wallFramerate}" --invert-y --transition-pos "$(hyprctl cursorpos | grep -E '^[0-9]' || echo "0,0")" &
+
